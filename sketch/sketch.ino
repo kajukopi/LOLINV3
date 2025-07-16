@@ -4,14 +4,13 @@
 #include <FirebaseESP8266.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
-#include <time.h>
 
 // WiFi credentials
 const char* ssid = "karimroy";
 const char* password = "09871234";
 
 // Firebase credentials
-#define FIREBASE_HOST "your-project-id.firebaseio.com"
+#define FIREBASE_HOST "payunghitam-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define FIREBASE_EMAIL "esp8266@yourapp.com"
 #define FIREBASE_PASSWORD "password123"
 
@@ -51,7 +50,7 @@ void setup() {
   Firebase.begin(FIREBASE_HOST, FIREBASE_EMAIL, FIREBASE_PASSWORD);
   Firebase.reconnectWiFi(true);
 
-  // Set status to Online
+  // Set status ke Online
   deviceStatus = "Online";
   Firebase.setString(fbdo, "/device/status", deviceStatus);
 
@@ -60,14 +59,12 @@ void setup() {
   String logPath = "/device/logs/" + timeStr;
   Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
 
-  // Homepage with logs and status
+  // Halaman utama: tampilkan status + log dari Firebase
   server.on("/", []() {
     String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>ESP8266 Status</title></head><body style='font-family:sans-serif;background:#111;color:#fff;padding:20px;'>";
-
     html += "<h2>Status Perangkat</h2>";
     html += "<p>Status: <strong>" + deviceStatus + "</strong></p>";
     html += "<p>IP: " + WiFi.localIP().toString() + "</p>";
-
     html += "<h2>Riwayat Log</h2><ul>";
 
     if (Firebase.getJSON(fbdo, "/device/logs")) {
@@ -92,8 +89,8 @@ void setup() {
     lcdPrint("Page: /", "View logs");
   });
 
-  // OTA update
-  httpUpdater.setup(&server); // default /update
+  // OTA Update via /update
+  httpUpdater.setup(&server);
 
   server.begin();
   Serial.println("HTTP server started");
