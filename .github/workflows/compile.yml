@@ -2,49 +2,49 @@ name: 📦 Compile ESP8266 Sketch
 
 on:
   push:
-    branches: [main]  # 🔁 Jalankan saat ada push ke main
-  workflow_dispatch:  # ▶️ Bisa dijalankan manual lewat GitHub UI
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write  # ✍️ Diperlukan untuk membuat GitHub Release
+  contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # 💻 Gunakan runner Ubuntu terbaru
+    runs-on: ubuntu-latest
 
     steps:
     - name: 🛒 Checkout source code
-      uses: actions/checkout@v4  # 📂 Ambil kode dari repository
+      uses: actions/checkout@v4
 
     - name: ⚙️ Set up Arduino CLI
-      uses: arduino/setup-arduino-cli@v1  # 🔧 Install Arduino CLI
+      uses: arduino/setup-arduino-cli@v1
 
     - name: 🧱 Initialize Arduino CLI config
-      run: arduino-cli config init  # 🗃️ Inisialisasi konfigurasi CLI
+      run: arduino-cli config init
 
     - name: ➕ Add ESP8266 Board Manager URL
       run: |
         arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
-        # 🔗 Tambahkan URL board manager ESP8266
 
     - name: 📥 Install ESP8266 core
       run: |
-        arduino-cli core update-index  # 🔄 Update index
-        arduino-cli core install esp8266:esp8266  # 📲 Install ESP8266 core
+        arduino-cli core update-index
+        arduino-cli core install esp8266:esp8266
 
     - name: 📁 Configure Arduino library path
       run: |
         echo "directories:\n  user: $HOME/Arduino" > ~/.arduino15/arduino-cli.yaml
-        # 🛤️ Set path library pengguna
 
-    - name: 📚 Install required libraries
+    - name: 📚 Install LiquidCrystal_I2C
       run: |
-        # 📦 Manual install LiquidCrystal_I2C
         mkdir -p ~/Arduino/libraries
         cd ~/Arduino/libraries
         curl -L https://github.com/johnrickman/LiquidCrystal_I2C/archive/refs/heads/master.zip -o LiquidCrystal_I2C.zip
         unzip LiquidCrystal_I2C.zip
         mv LiquidCrystal_I2C-master LiquidCrystal_I2C
+
+    - name: 📚 Install FirebaseESP8266
+      run: arduino-cli lib install "Firebase ESP8266"
 
     - name: 🛠️ Compile sketch
       run: |
@@ -53,7 +53,6 @@ jobs:
           sketch \
           --output-dir build \
           --verbose
-        # 🔨 Kompilasi sketch menjadi file binary
 
     - name: 📅 Get date in Asia/Jakarta
       id: date
@@ -63,22 +62,19 @@ jobs:
         detail=$(date "+📅 %A, %d %B %Y 🕒 %H:%M %Z")
         echo "today=$today" >> "$GITHUB_OUTPUT"
         echo "detail=$detail" >> "$GITHUB_OUTPUT"
-        # 🌏 Zona waktu WIB, tanggal + jam untuk nama dan deskripsi release
 
     - name: 🗃️ Rename firmware with date
       run: |
-        ls build  # 👀 Lihat isi folder
+        ls build
         for f in build/*.bin; do
           mv "$f" "build/LOLINV3-${{ steps.date.outputs.today }}.bin"
         done
-        # 🏷️ Tambahkan timestamp ke nama firmware
 
     - name: 📤 Upload firmware artifact
       uses: actions/upload-artifact@v4
       with:
         name: LOLINV3-${{ steps.date.outputs.today }}
         path: build/LOLINV3-*.bin
-        # ☁️ Simpan sebagai artifact GitHub Actions
 
     - name: 🚀 Create GitHub Release
       uses: softprops/action-gh-release@v1
