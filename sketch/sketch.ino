@@ -12,7 +12,6 @@ ESP8266WebServer server(80);
 
 size_t totalSize = 0;
 
-// 📊 Progress Bar di LCD
 void lcdProgressBar(int percent) {
   int bars = map(percent, 0, 100, 0, 10);
   lcd.setCursor(0, 1);
@@ -21,7 +20,6 @@ void lcdProgressBar(int percent) {
   lcd.print("]");
 }
 
-// Fungsi tulis 2 baris ke LCD
 void lcdPrint(const String& l1, const String& l2 = "") {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -30,7 +28,6 @@ void lcdPrint(const String& l1, const String& l2 = "") {
   lcd.print(l2);
 }
 
-// Navbar HTML
 String navBar = R"rawliteral(
   <nav style="background:#222;padding:10px;color:#fff;text-align:center">
     <a href="/" style="color:#0ff;margin:0 10px;">Home</a>
@@ -40,7 +37,6 @@ String navBar = R"rawliteral(
   </nav>
 )rawliteral";
 
-// 🏠 Home Page
 String homePage = R"rawliteral(
 <!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>Home</title></head>
 <body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
@@ -50,7 +46,6 @@ $NAV$
 </body></html>
 )rawliteral";
 
-// ⚙️ OTA Page
 String otaPage = R"rawliteral(
 <!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>OTA</title></head>
 <body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
@@ -63,7 +58,6 @@ $NAV$
 </body></html>
 )rawliteral";
 
-// 📈 Status Page (dinamis)
 String statusPage() {
   IPAddress ip = WiFi.localIP();
   String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='background:#111;color:#fff;text-align:center;font-family:sans-serif;'>";
@@ -72,7 +66,6 @@ String statusPage() {
   return html;
 }
 
-// 📜 Log Page (statik)
 String logPage = R"rawliteral(
 <!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>Log</title></head>
 <body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
@@ -84,6 +77,7 @@ $NAV$
 )rawliteral";
 
 void setup() {
+  Serial.begin(115200);
   lcd.init();
   lcd.backlight();
   lcdPrint("WiFi Connect", ssid);
@@ -92,11 +86,13 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     lcdPrint("Connecting...", ".");
+    Serial.print(".");
   }
 
   lcdPrint("Connected", WiFi.localIP().toString());
+  Serial.println("\nConnected to WiFi");
+  Serial.println("IP Address: " + WiFi.localIP().toString());
 
-  // 🏠 Home
   server.on("/", []() {
     String page = homePage;
     page.replace("$NAV$", navBar);
@@ -104,7 +100,6 @@ void setup() {
     lcdPrint("Page: Home");
   });
 
-  // ⚙️ OTA
   server.on("/ota", []() {
     String page = otaPage;
     page.replace("$NAV$", navBar);
@@ -112,14 +107,12 @@ void setup() {
     lcdPrint("Page: OTA");
   });
 
-  // 📈 Status
   server.on("/status", []() {
     String html = statusPage();
     server.send(200, "text/html", html);
     lcdPrint("Page: Status");
   });
 
-  // 📜 Log
   server.on("/log", []() {
     String page = logPage;
     page.replace("$NAV$", navBar);
@@ -127,24 +120,36 @@ void setup() {
     lcdPrint("Page: Log");
   });
 
-  // OTA POST Handler
   server.on("/update", HTTP_POST, []() {
     bool ok = !Update.hasError();
     String msg = ok ? "Sukses" : "Gagal";
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", msg + ", restart...");
     lcdPrint("OTA " + msg, "Restart...");
-    delay(1500);
+    delay(2000);
     ESP.restart();
   }, []() {
     HTTPUpload& upload = server.upload();
 
     if (upload.status == UPLOAD_FILE_START) {
+      Serial.printf("Update Start: %s\n", upload.filename.c_str());
       totalSize = 0;
       lcdPrint("Upload:", upload.filename.substring(0, 16));
-      Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
+
+      if (!Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000)) {
+        Update.printError(Serial);
+        lcdPrint("Begin Failed", "");
+        return;
+      }
+
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-      Update.write(upload.buf, upload.currentSize);
+      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+        Update.printError(Serial);
+        lcdPrint("Write Error", "Restart...");
+        delay(2000);
+        ESP.restart();
+      }
+
       totalSize += upload.currentSize;
       int percent = (totalSize * 100) / upload.totalSize;
 
@@ -153,10 +158,13 @@ void setup() {
       lcd.print(percent);
       lcd.print("%   ");
       lcdProgressBar(percent);
+
     } else if (upload.status == UPLOAD_FILE_END) {
       if (Update.end(true)) {
+        Serial.printf("Update Success: %u bytes\n", totalSize);
         lcdPrint("Update Sukses", String(totalSize) + "B");
       } else {
+        Update.printError(Serial);
         lcdPrint("Update Gagal", "End failed");
       }
     }
@@ -164,6 +172,7 @@ void setup() {
 
   server.begin();
   lcdPrint("OTA Aktif", WiFi.localIP().toString());
+  Serial.println("HTTP server started");
 }
 
 void loop() {
