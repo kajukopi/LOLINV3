@@ -1,8 +1,8 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <LiquidCrystal_I2C.h>
-#include <Updater.h>
 #include <Wire.h>
+#include <Updater.h>
 
 const char* ssid = "karimroy";
 const char* password = "09871234";
@@ -12,7 +12,16 @@ ESP8266WebServer server(80);
 
 size_t totalSize = 0;
 
-// 🧾 Fungsi untuk tampil 2 baris di LCD
+// 📊 Progress Bar di LCD
+void lcdProgressBar(int percent) {
+  int bars = map(percent, 0, 100, 0, 10);
+  lcd.setCursor(0, 1);
+  lcd.print("[");
+  for (int i = 0; i < 10; i++) lcd.print(i < bars ? "#" : " ");
+  lcd.print("]");
+}
+
+// Fungsi tulis 2 baris ke LCD
 void lcdPrint(const String& l1, const String& l2 = "") {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -21,18 +30,7 @@ void lcdPrint(const String& l1, const String& l2 = "") {
   lcd.print(l2);
 }
 
-// 📊 Progress bar 10 kolom
-void lcdProgressBar(int percent) {
-  int bars = map(percent, 0, 100, 0, 10);
-  lcd.setCursor(0, 1);
-  lcd.print("[");
-  for (int i = 0; i < 10; i++) {
-    lcd.print(i < bars ? "#" : " ");
-  }
-  lcd.print("]");
-}
-
-// 📱 HTML template
+// Navbar HTML
 String navBar = R"rawliteral(
   <nav style="background:#222;padding:10px;color:#fff;text-align:center">
     <a href="/" style="color:#0ff;margin:0 10px;">Home</a>
@@ -42,7 +40,7 @@ String navBar = R"rawliteral(
   </nav>
 )rawliteral";
 
-// 🏠 HOME
+// 🏠 Home Page
 String homePage = R"rawliteral(
 <!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>Home</title></head>
 <body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
@@ -52,7 +50,7 @@ $NAV$
 </body></html>
 )rawliteral";
 
-// ⚙️ OTA
+// ⚙️ OTA Page
 String otaPage = R"rawliteral(
 <!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>OTA</title></head>
 <body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
@@ -65,13 +63,16 @@ $NAV$
 </body></html>
 )rawliteral";
 
-// 📈 STATUS
+// 📈 Status Page (dinamis)
 String statusPage() {
   IPAddress ip = WiFi.localIP();
-  return navBar + "<h3>Status</h3><p>IP: " + ip.toString() + "</p>";
+  String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='background:#111;color:#fff;text-align:center;font-family:sans-serif;'>";
+  html += navBar;
+  html += "<h3>Status</h3><p>IP: " + ip.toString() + "</p></body></html>";
+  return html;
 }
 
-// 📜 LOG (simple static, bisa nanti ditambah log memory/dynamic)
+// 📜 Log Page (statik)
 String logPage = R"rawliteral(
 <!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>Log</title></head>
 <body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
@@ -82,7 +83,6 @@ $NAV$
 </body></html>
 )rawliteral";
 
-// ⬇️ OTA Handler
 void setup() {
   lcd.init();
   lcd.backlight();
@@ -96,27 +96,38 @@ void setup() {
 
   lcdPrint("Connected", WiFi.localIP().toString());
 
+  // 🏠 Home
   server.on("/", []() {
-    server.send(200, "text/html", homePage.replace("$NAV$", navBar));
+    String page = homePage;
+    page.replace("$NAV$", navBar);
+    server.send(200, "text/html", page);
     lcdPrint("Page: Home");
   });
 
+  // ⚙️ OTA
   server.on("/ota", []() {
-    server.send(200, "text/html", otaPage.replace("$NAV$", navBar));
+    String page = otaPage;
+    page.replace("$NAV$", navBar);
+    server.send(200, "text/html", page);
     lcdPrint("Page: OTA");
   });
 
+  // 📈 Status
   server.on("/status", []() {
-    server.send(200, "text/html", statusPage());
+    String html = statusPage();
+    server.send(200, "text/html", html);
     lcdPrint("Page: Status");
   });
 
+  // 📜 Log
   server.on("/log", []() {
-    server.send(200, "text/html", logPage.replace("$NAV$", navBar));
+    String page = logPage;
+    page.replace("$NAV$", navBar);
+    server.send(200, "text/html", page);
     lcdPrint("Page: Log");
   });
 
-  // 📤 OTA Upload Logic
+  // OTA POST Handler
   server.on("/update", HTTP_POST, []() {
     bool ok = !Update.hasError();
     String msg = ok ? "Sukses" : "Gagal";
@@ -130,13 +141,13 @@ void setup() {
 
     if (upload.status == UPLOAD_FILE_START) {
       totalSize = 0;
-      lcdPrint("Mulai Upload", upload.filename.substring(0, 16));
+      lcdPrint("Upload:", upload.filename.substring(0, 16));
       Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
     } else if (upload.status == UPLOAD_FILE_WRITE) {
       Update.write(upload.buf, upload.currentSize);
       totalSize += upload.currentSize;
-
       int percent = (totalSize * 100) / upload.totalSize;
+
       lcd.setCursor(0, 0);
       lcd.print("Upload: ");
       lcd.print(percent);
@@ -146,13 +157,13 @@ void setup() {
       if (Update.end(true)) {
         lcdPrint("Update Sukses", String(totalSize) + "B");
       } else {
-        lcdPrint("Update Gagal", "");
+        lcdPrint("Update Gagal", "End failed");
       }
     }
   });
 
   server.begin();
-  lcdPrint("OTA Ready", WiFi.localIP().toString());
+  lcdPrint("OTA Aktif", WiFi.localIP().toString());
 }
 
 void loop() {
