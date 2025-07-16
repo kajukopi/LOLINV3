@@ -28,10 +28,11 @@ void lcdPrint(const String& l1, const String& l2 = "") {
   lcd.print(l2);
 }
 
+// 🔄 Navbar dengan "Update"
 String navBar = R"rawliteral(
   <nav style="background:#222;padding:10px;color:#fff;text-align:center">
     <a href="/" style="color:#0ff;margin:0 10px;">Home</a>
-    <a href="/ota" style="color:#0ff;margin:0 10px;">OTA</a>
+    <a href="/update" style="color:#0ff;margin:0 10px;">Update</a>
     <a href="/status" style="color:#0ff;margin:0 10px;">Status</a>
     <a href="/log" style="color:#0ff;margin:0 10px;">Log</a>
   </nav>
@@ -46,12 +47,13 @@ $NAV$
 </body></html>
 )rawliteral";
 
-String otaPage = R"rawliteral(
-<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>OTA</title></head>
+// ⚙️ Halaman Update (dari sebelumnya /ota)
+String updatePage = R"rawliteral(
+<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>Update</title></head>
 <body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
 $NAV$
-<h2>OTA Update</h2>
-<form method='POST' action='/update' enctype='multipart/form-data'>
+<h2>Firmware Update</h2>
+<form method='POST' action='/upload' enctype='multipart/form-data'>
   <input type='file' name='firmware'><br><br>
   <input type='submit' value='Upload'>
 </form>
@@ -100,11 +102,12 @@ void setup() {
     lcdPrint("Page: Home");
   });
 
-  server.on("/ota", []() {
-    String page = otaPage;
+  // Halaman update baru (dulu: /ota)
+  server.on("/update", []() {
+    String page = updatePage;
     page.replace("$NAV$", navBar);
     server.send(200, "text/html", page);
-    lcdPrint("Page: OTA");
+    lcdPrint("Page: Update");
   });
 
   server.on("/status", []() {
@@ -120,7 +123,8 @@ void setup() {
     lcdPrint("Page: Log");
   });
 
-  server.on("/update", HTTP_POST, []() {
+  // Handler POST Upload
+  server.on("/upload", HTTP_POST, []() {
     bool ok = !Update.hasError();
     String msg = ok ? "Sukses" : "Gagal";
     server.sendHeader("Connection", "close");
