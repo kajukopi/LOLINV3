@@ -1,0 +1,95 @@
+name: 📦 Compile ESP8266 Sketch
+
+on:
+  push:
+    branches: [main]  # 🔁 Jalankan saat ada push ke main
+  workflow_dispatch:  # ▶️ Bisa dijalankan manual lewat GitHub UI
+
+permissions:
+  contents: write  # ✍️ Diperlukan untuk membuat GitHub Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # 💻 Gunakan runner Ubuntu terbaru
+
+    steps:
+    - name: 🛒 Checkout source code
+      uses: actions/checkout@v4  # 📂 Ambil kode dari repository
+
+    - name: ⚙️ Set up Arduino CLI
+      uses: arduino/setup-arduino-cli@v1  # 🔧 Install Arduino CLI
+
+    - name: 🧱 Initialize Arduino CLI config
+      run: arduino-cli config init  # 🗃️ Inisialisasi konfigurasi CLI
+
+    - name: ➕ Add ESP8266 Board Manager URL
+      run: |
+        arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+        # 🔗 Tambahkan URL board manager ESP8266
+
+    - name: 📥 Install ESP8266 core
+      run: |
+        arduino-cli core update-index  # 🔄 Update index
+        arduino-cli core install esp8266:esp8266  # 📲 Install ESP8266 core
+
+    - name: 📁 Configure Arduino library path
+      run: |
+        echo "directories:\n  user: $HOME/Arduino" > ~/.arduino15/arduino-cli.yaml
+        # 🛤️ Set path library pengguna
+
+    - name: 📚 Install required libraries
+      run: |
+        # 📦 Manual install LiquidCrystal_I2C
+        mkdir -p ~/Arduino/libraries
+        cd ~/Arduino/libraries
+        curl -L https://github.com/johnrickman/LiquidCrystal_I2C/archive/refs/heads/master.zip -o LiquidCrystal_I2C.zip
+        unzip LiquidCrystal_I2C.zip
+        mv LiquidCrystal_I2C-master LiquidCrystal_I2C
+
+    - name: 🛠️ Compile sketch
+      run: |
+        arduino-cli compile \
+          --fqbn esp8266:esp8266:nodemcuv2 \
+          sketch \
+          --output-dir build \
+          --verbose
+        # 🔨 Kompilasi sketch menjadi file binary
+
+    - name: 📅 Get date in Asia/Jakarta
+      id: date
+      run: |
+        export TZ=Asia/Jakarta
+        today=$(date +%F-%H%M)
+        detail=$(date "+📅 %A, %d %B %Y 🕒 %H:%M %Z")
+        echo "today=$today" >> "$GITHUB_OUTPUT"
+        echo "detail=$detail" >> "$GITHUB_OUTPUT"
+        # 🌏 Zona waktu WIB, tanggal + jam untuk nama dan deskripsi release
+
+    - name: 🗃️ Rename firmware with date
+      run: |
+        ls build  # 👀 Lihat isi folder
+        for f in build/*.bin; do
+          mv "$f" "build/ESP8266-${{ steps.date.outputs.today }}.bin"
+        done
+        # 🏷️ Tambahkan timestamp ke nama firmware
+
+    - name: 📤 Upload firmware artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ESP8266-${{ steps.date.outputs.today }}
+        path: build/ESP8266-*.bin
+        # ☁️ Simpan sebagai artifact GitHub Actions
+
+    - name: 🚀 Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ESP8266-${{ steps.date.outputs.today }}
+        files: build/ESP8266-*.bin
+        body: |
+          🔖 **Informasi Build Firmware**
+          ----------------------------------------
+          🛠️ Nama File: `ESP8266-${{ steps.date.outputs.today }}.bin`  
+          📅 Tanggal Build: ${{ steps.date.outputs.detail }}
+          📂 Direktori Output: `/build`
+
+          ✅ dibuat oleh karimroy.digital
