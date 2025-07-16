@@ -69,26 +69,26 @@ jobs:
       run: |
         ls build  # 👀 Lihat isi folder
         for f in build/*.bin; do
-          mv "$f" "build/ESP8266-${{ steps.date.outputs.today }}.bin"
+          mv "$f" "build/LOLINV3-${{ steps.date.outputs.today }}.bin"
         done
         # 🏷️ Tambahkan timestamp ke nama firmware
 
     - name: 📤 Upload firmware artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ESP8266-${{ steps.date.outputs.today }}
-        path: build/ESP8266-*.bin
+        name: LOLINV3-${{ steps.date.outputs.today }}
+        path: build/LOLINV3-*.bin
         # ☁️ Simpan sebagai artifact GitHub Actions
 
     - name: 🚀 Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ESP8266-${{ steps.date.outputs.today }}
-        files: build/ESP8266-*.bin
+        tag_name: LOLINV3-${{ steps.date.outputs.today }}
+        files: build/LOLINV3-*.bin
         body: |
           🔖 **Informasi Build Firmware**
           ----------------------------------------
-          🛠️ Nama File: `ESP8266-${{ steps.date.outputs.today }}.bin`  
+          🛠️ Nama File: `LOLINV3-${{ steps.date.outputs.today }}.bin`  
           📅 Tanggal Build: ${{ steps.date.outputs.detail }}
           📂 Direktori Output: `/build`
 
