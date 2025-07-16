@@ -44,7 +44,7 @@ jobs:
         mv LiquidCrystal_I2C-master LiquidCrystal_I2C
 
     - name: 📚 Install FirebaseESP8266
-      run: arduino-cli lib install "Firebase ESP8266"
+      run: arduino-cli lib install "Firebase_ESP8266"
 
     - name: 🛠️ Compile sketch
       run: |
