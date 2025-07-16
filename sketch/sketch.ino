@@ -36,8 +36,15 @@ void setup() {
   Serial.println();
   Serial.println("IP address: " + WiFi.localIP().toString());
 
-  // OTA Web Update setup
-  httpUpdater.setup(&server); // default di path "/update"
+  // Tambah route halaman utama
+  server.on("/", []() {
+    server.send(200, "text/plain", "ESP8266 OTA Web Updater\n\nBuka /update untuk upload firmware.");
+    lcdPrint("Page: /");
+  });
+
+  // Aktifkan halaman OTA bawaan
+  httpUpdater.setup(&server); // path default: /update
+
   server.begin();
   Serial.println("HTTP server started");
   lcdPrint("OTA Aktif", "/update");
