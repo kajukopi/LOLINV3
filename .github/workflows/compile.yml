@@ -43,8 +43,13 @@ jobs:
         unzip LiquidCrystal_I2C.zip
         mv LiquidCrystal_I2C-master LiquidCrystal_I2C
 
-    - name: 📚 Install FirebaseESP8266
-      run: arduino-cli lib install "Firebase_ESP8266"
+    - name: 📚 Install FirebaseESP8266 (manual)
+      run: |
+        mkdir -p ~/Arduino/libraries
+        cd ~/Arduino/libraries
+        curl -L https://github.com/mobizt/Firebase-ESP8266/archive/refs/heads/master.zip -o FirebaseESP8266.zip
+        unzip FirebaseESP8266.zip
+        mv Firebase-ESP8266-master FirebaseESP8266
 
     - name: 🛠️ Compile sketch
       run: |
