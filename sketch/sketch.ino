@@ -4,8 +4,8 @@
 #include <Updater.h>
 #include <Wire.h>
 
-const char* ssid = "NAMA_WIFI_KAMU";
-const char* password = "PASSWORD_WIFI_KAMU";
+const char* ssid = "karimroy";
+const char* password = "09871234";
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
