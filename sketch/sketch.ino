@@ -13,11 +13,14 @@ const char* password = "09871234";
 #define FIREBASE_HOST "payunghitam-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define FIREBASE_EMAIL "esp8266@yourapp.com"
 #define FIREBASE_PASSWORD "password123"
+#define FIREBASE_API_KEY "AIzaSyBczsujBWZbP2eq5C1YR1JF3xPixWVYnxY"  // Ganti dengan API key Firebase
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
 
 String deviceStatus = "Unknown";
 
@@ -46,8 +49,14 @@ void setup() {
   Serial.println();
   Serial.println("IP address: " + WiFi.localIP().toString());
 
-  // 🔐 Firebase
-  Firebase.begin(FIREBASE_HOST, FIREBASE_EMAIL, FIREBASE_PASSWORD);
+  // 🔐 Konfigurasi Firebase modern
+  config.api_key = FIREBASE_API_KEY;
+  config.database_url = "https://" FIREBASE_HOST;
+
+  auth.user.email = FIREBASE_EMAIL;
+  auth.user.password = FIREBASE_PASSWORD;
+
+  Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
   // Set status ke Online
