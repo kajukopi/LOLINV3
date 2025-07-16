@@ -46,7 +46,7 @@ void setup() {
   Serial.println();
   Serial.println("IP address: " + WiFi.localIP().toString());
 
-  // Firebase
+  // 🔐 Firebase
   Firebase.begin(FIREBASE_HOST, FIREBASE_EMAIL, FIREBASE_PASSWORD);
   Firebase.reconnectWiFi(true);
 
@@ -59,7 +59,7 @@ void setup() {
   String logPath = "/device/logs/" + timeStr;
   Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
 
-  // Halaman utama: tampilkan status + log dari Firebase
+  // 🌐 Halaman utama
   server.on("/", []() {
     String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>ESP8266 Status</title></head><body style='font-family:sans-serif;background:#111;color:#fff;padding:20px;'>";
     html += "<h2>Status Perangkat</h2>";
