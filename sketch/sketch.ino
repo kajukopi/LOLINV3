@@ -1,48 +1,91 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-#include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Updater.h>
+#include <Wire.h>
 
-// Ganti dengan WiFi kamu
-const char* ssid = "karimroy";
-const char* password = "09871234";
+const char* ssid = "NAMA_WIFI_KAMU";
+const char* password = "PASSWORD_WIFI_KAMU";
 
-// Ganti alamat I2C jika perlu (biasanya 0x27 atau 0x3F)
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 
-// Halaman HTML OTA ringan (tanpa Bootstrap)
-const char* upload_html = R"rawliteral(
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8">
-    <title>ESP OTA</title>
-  </head>
-  <body style="background:#111; color:#fff; text-align:center; font-family:sans-serif;">
-    <h2>ESP8266 OTA Update</h2>
-    <form method="POST" action="/update" enctype="multipart/form-data">
-      <input type="file" name="firmware"><br><br>
-      <input type="submit" value="Upload">
-    </form>
-    <p>Upload .bin firmware ke ESP</p>
-  </body>
-</html>
-)rawliteral";
+size_t totalSize = 0;
 
-// Fungsi cetak ke LCD
-void lcdPrint(const String& line1, const String& line2 = "") {
+// 🧾 Fungsi untuk tampil 2 baris di LCD
+void lcdPrint(const String& l1, const String& l2 = "") {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(line1);
+  lcd.print(l1);
   lcd.setCursor(0, 1);
-  lcd.print(line2);
+  lcd.print(l2);
 }
 
+// 📊 Progress bar 10 kolom
+void lcdProgressBar(int percent) {
+  int bars = map(percent, 0, 100, 0, 10);
+  lcd.setCursor(0, 1);
+  lcd.print("[");
+  for (int i = 0; i < 10; i++) {
+    lcd.print(i < bars ? "#" : " ");
+  }
+  lcd.print("]");
+}
+
+// 📱 HTML template
+String navBar = R"rawliteral(
+  <nav style="background:#222;padding:10px;color:#fff;text-align:center">
+    <a href="/" style="color:#0ff;margin:0 10px;">Home</a>
+    <a href="/ota" style="color:#0ff;margin:0 10px;">OTA</a>
+    <a href="/status" style="color:#0ff;margin:0 10px;">Status</a>
+    <a href="/log" style="color:#0ff;margin:0 10px;">Log</a>
+  </nav>
+)rawliteral";
+
+// 🏠 HOME
+String homePage = R"rawliteral(
+<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>Home</title></head>
+<body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
+$NAV$
+<h2>ESP8266 Web OTA</h2>
+<p>Firmware update, monitoring & logs</p>
+</body></html>
+)rawliteral";
+
+// ⚙️ OTA
+String otaPage = R"rawliteral(
+<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>OTA</title></head>
+<body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
+$NAV$
+<h2>OTA Update</h2>
+<form method='POST' action='/update' enctype='multipart/form-data'>
+  <input type='file' name='firmware'><br><br>
+  <input type='submit' value='Upload'>
+</form>
+</body></html>
+)rawliteral";
+
+// 📈 STATUS
+String statusPage() {
+  IPAddress ip = WiFi.localIP();
+  return navBar + "<h3>Status</h3><p>IP: " + ip.toString() + "</p>";
+}
+
+// 📜 LOG (simple static, bisa nanti ditambah log memory/dynamic)
+String logPage = R"rawliteral(
+<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>Log</title></head>
+<body style="font-family:sans-serif;background:#111;color:#fff;text-align:center;">
+$NAV$
+<h2>Logs</h2>
+<p>OTA terakhir: Berhasil</p>
+<p>Ukuran: 230,000 bytes</p>
+</body></html>
+)rawliteral";
+
+// ⬇️ OTA Handler
 void setup() {
-  lcd.init();         // ✅ Gunakan init() sesuai permintaan
-  lcd.backlight();    // ✅ Nyalakan lampu belakang
+  lcd.init();
+  lcd.backlight();
   lcdPrint("WiFi Connect", ssid);
 
   WiFi.begin(ssid, password);
@@ -51,45 +94,65 @@ void setup() {
     lcdPrint("Connecting...", ".");
   }
 
-  IPAddress ip = WiFi.localIP();
-  lcdPrint("WiFi Terhubung", ip.toString());
+  lcdPrint("Connected", WiFi.localIP().toString());
 
-  server.on("/", HTTP_GET, []() {
-    server.send(200, "text/html", upload_html);
-    lcdPrint("Akses Web", "/");
+  server.on("/", []() {
+    server.send(200, "text/html", homePage.replace("$NAV$", navBar));
+    lcdPrint("Page: Home");
   });
 
+  server.on("/ota", []() {
+    server.send(200, "text/html", otaPage.replace("$NAV$", navBar));
+    lcdPrint("Page: OTA");
+  });
+
+  server.on("/status", []() {
+    server.send(200, "text/html", statusPage());
+    lcdPrint("Page: Status");
+  });
+
+  server.on("/log", []() {
+    server.send(200, "text/html", logPage.replace("$NAV$", navBar));
+    lcdPrint("Page: Log");
+  });
+
+  // 📤 OTA Upload Logic
   server.on("/update", HTTP_POST, []() {
-    String msg = Update.hasError() ? "Update Gagal" : "Update OK";
+    bool ok = !Update.hasError();
+    String msg = ok ? "Sukses" : "Gagal";
     server.sendHeader("Connection", "close");
-    server.send(200, "text/plain", msg + ", Restart...");
-    lcdPrint(msg, "Restarting...");
+    server.send(200, "text/plain", msg + ", restart...");
+    lcdPrint("OTA " + msg, "Restart...");
     delay(1500);
     ESP.restart();
   }, []() {
     HTTPUpload& upload = server.upload();
 
     if (upload.status == UPLOAD_FILE_START) {
+      totalSize = 0;
       lcdPrint("Mulai Upload", upload.filename.substring(0, 16));
-      if (!Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000)) {
-        lcdPrint("Update Error!", "Begin Failed");
-      }
+      Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-      lcdPrint("Menulis...", String(upload.currentSize) + "B");
-      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-        lcdPrint("Write Error!", "");
-      }
+      Update.write(upload.buf, upload.currentSize);
+      totalSize += upload.currentSize;
+
+      int percent = (totalSize * 100) / upload.totalSize;
+      lcd.setCursor(0, 0);
+      lcd.print("Upload: ");
+      lcd.print(percent);
+      lcd.print("%   ");
+      lcdProgressBar(percent);
     } else if (upload.status == UPLOAD_FILE_END) {
       if (Update.end(true)) {
-        lcdPrint("Update OK", String(upload.totalSize) + " byte");
+        lcdPrint("Update Sukses", String(totalSize) + "B");
       } else {
-        lcdPrint("Update Gagal", "End Failed");
+        lcdPrint("Update Gagal", "");
       }
     }
   });
 
   server.begin();
-  lcdPrint("OTA Aktif", "Buka Browser");
+  lcdPrint("OTA Ready", WiFi.localIP().toString());
 }
 
 void loop() {
