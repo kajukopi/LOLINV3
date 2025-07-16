@@ -1,4 +1,4 @@
-name: 📦 Compile ESP8266 Sketch
+name: 📦 Compile LOLINV3 Sketch
 
 on:
   push:
@@ -22,11 +22,11 @@ jobs:
     - name: 🧱 Initialize Arduino CLI config
       run: arduino-cli config init
 
-    - name: ➕ Add ESP8266 Board Manager URL
+    - name: ➕ Add LOLINV3 Board Manager URL
       run: |
         arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
 
-    - name: 📥 Install ESP8266 core
+    - name: 📥 Install LOLINV3 core
       run: |
         arduino-cli core update-index
         arduino-cli core install esp8266:esp8266
@@ -35,18 +35,13 @@ jobs:
       run: |
         echo "directories:\n  user: $HOME/Arduino" > ~/.arduino15/arduino-cli.yaml
 
-    - name: 📚 Install LiquidCrystal_I2C
+    - name: 📚 Install required libraries
       run: |
         mkdir -p ~/Arduino/libraries
         cd ~/Arduino/libraries
         curl -L https://github.com/johnrickman/LiquidCrystal_I2C/archive/refs/heads/master.zip -o LiquidCrystal_I2C.zip
         unzip LiquidCrystal_I2C.zip
         mv LiquidCrystal_I2C-master LiquidCrystal_I2C
-
-    - name: 📚 Install FirebaseESP8266 (manual)
-      run: |
-        mkdir -p ~/Arduino/libraries
-        cd ~/Arduino/libraries
         curl -L https://github.com/mobizt/Firebase-ESP8266/archive/refs/heads/master.zip -o FirebaseESP8266.zip
         unzip FirebaseESP8266.zip
         mv Firebase-ESP8266-master FirebaseESP8266
