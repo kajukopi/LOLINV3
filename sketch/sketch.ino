@@ -56,7 +56,7 @@ void connectWiFi() {
 }
 
 void initFirebase() {
-  lcdMessage("Init Firebase", "");
+  lcdMessage("Init Firebase");
   config.api_key = FIREBASE_API_KEY;
   config.database_url = "https://" FIREBASE_HOST;
 
@@ -84,9 +84,7 @@ void logDeviceStatus() {
 
 void setupEndpoints() {
   server.on("/", []() {
-    String response = "Device Status: " + deviceStatus + "\n";
-    response += "IP Address: " + WiFi.localIP().toString() + "\n";
-    response += "Logs:\n";
+    String logHtml = "";
 
     if (Firebase.getJSON(fbdo, "/device/logs")) {
       FirebaseJson& logs = fbdo.jsonObject();
@@ -95,14 +93,46 @@ void setupEndpoints() {
         String key, value;
         int type;
         logs.iteratorGet(i, type, key, value);
-        response += " - " + key + ": " + value + "\n";
+        logHtml += "<li><strong>" + key + ":</strong> " + value + "</li>\n";
       }
       logs.iteratorEnd();
     } else {
-      response += "Error: " + fbdo.errorReason() + "\n";
+      logHtml += "<li>Error: " + fbdo.errorReason() + "</li>\n";
     }
 
-    server.send(200, "text/plain", response);
+    // Template HTML dengan token yang bisa diganti
+    String html = R"rawliteral(
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>ESP8266 Status</title>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial; text-align: center; margin-top: 40px; }
+          h1 { color: #333; }
+          ul { text-align: left; max-width: 400px; margin: auto; }
+          li { margin: 4px 0; }
+        </style>
+      </head>
+      <body>
+        <h1>ESP8266 Device</h1>
+        <p><strong>Status:</strong> {{status}}</p>
+        <p><strong>IP Address:</strong> {{ip}}</p>
+        <p><strong>Uptime:</strong> {{millis}} ms</p>
+        <h3>Log:</h3>
+        <ul>
+          {{logs}}
+        </ul>
+      </body>
+      </html>
+    )rawliteral";
+
+    html.replace("{{status}}", deviceStatus);
+    html.replace("{{ip}}", WiFi.localIP().toString());
+    html.replace("{{millis}}", String(millis()));
+    html.replace("{{logs}}", logHtml);
+
+    server.send(200, "text/html", html);
   });
 
   httpUpdater.setup(&server);
