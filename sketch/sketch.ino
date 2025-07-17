@@ -9,17 +9,15 @@
 const char* ssid = "karimroy";
 const char* password = "09871234";
 
-// Firebase config
+// Firebase credentials
 #define FIREBASE_HOST "payunghitam-default-rtdb.asia-southeast1.firebasedatabase.app"
-#define FIREBASE_API_KEY "AIzaSyBczsujBWZbP2eq5C1YR1JF3xPixWVYnxY"
-
 #define FIREBASE_EMAIL "esp8266@yourapp.com"
 #define FIREBASE_PASSWORD "password123"
+#define FIREBASE_API_KEY "AIzaSyBczsujBWZbP2eq5C1YR1JF3xPixWVYnxY"  // Ganti dengan API key Firebase
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
-
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
@@ -51,9 +49,9 @@ void setup() {
   Serial.println();
   Serial.println("IP address: " + WiFi.localIP().toString());
 
-  // Setup Firebase config
+  // 🔐 Konfigurasi Firebase modern
   config.api_key = FIREBASE_API_KEY;
-  config.database_url = FIREBASE_HOST;
+  config.database_url = "https://" FIREBASE_HOST;
 
   auth.user.email = FIREBASE_EMAIL;
   auth.user.password = FIREBASE_PASSWORD;
@@ -61,15 +59,16 @@ void setup() {
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  // Update status and log
+  // Set status ke Online
   deviceStatus = "Online";
   Firebase.setString(fbdo, "/device/status", deviceStatus);
 
+  // Simpan log boot time
   String timeStr = String(millis());
   String logPath = "/device/logs/" + timeStr;
   Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
 
-  // Halaman /
+  // 🌐 Halaman utama
   server.on("/", []() {
     String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>ESP8266 Status</title></head><body style='font-family:sans-serif;background:#111;color:#fff;padding:20px;'>";
     html += "<h2>Status Perangkat</h2>";
@@ -99,7 +98,7 @@ void setup() {
     lcdPrint("Page: /", "View logs");
   });
 
-  // OTA update
+  // OTA Update via /update
   httpUpdater.setup(&server);
 
   server.begin();
