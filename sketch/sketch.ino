@@ -1,79 +1,112 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPUpdateServer.h>
+#include <FirebaseESP8266.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
-#include <FirebaseESP8266.h>
-#include <Updater.h>
 
-#define IR_SENSOR_PIN D5  // Pin sensor Flying Fish IR
-
+// WiFi credentials
 const char* ssid = "karimroy";
 const char* password = "09871234";
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
-ESP8266WebServer server(80);
-
 // Firebase config
 #define FIREBASE_HOST "payunghitam-default-rtdb.asia-southeast1.firebasedatabase.app"
-#define FIREBASE_AUTH "AIzaSyBczsujBWZbP2eq5C1YR1JF3xPixWVYnxY"
-FirebaseData firebaseData;
+#define FIREBASE_API_KEY "AIzaSyBczsujBWZbP2eq5C1YR1JF3xPixWVYnxY"
 
-String sensorStatus = "Tidak Aktif";
+#define FIREBASE_EMAIL "esp8266@yourapp.com"
+#define FIREBASE_PASSWORD "password123"
 
-void handleRoot() {
-  String page = "<html><head><meta charset='UTF-8'><title>ESP8266 Status</title>";
-  page += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
-  page += "<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.4.0/mdb.min.css'/>";
-  page += "<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'/>";
-  page += "</head><body><div class='container mt-5'>";
-  page += "<h3><i class='fas fa-microchip'></i> ESP8266 Status</h3><hr/>";
-  page += "<p><strong>Sensor IR:</strong> " + sensorStatus + "</p>";
-  page += "<p><strong>Firebase:</strong> " + String(Firebase.ready() ? "Terhubung" : "Tidak Terhubung") + "</p>";
-  page += "</div></body></html>";
-  server.send(200, "text/html", page);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+ESP8266WebServer server(80);
+ESP8266HTTPUpdateServer httpUpdater;
+
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+String deviceStatus = "Unknown";
+
+void lcdPrint(const String& line1, const String& line2 = "") {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1);
+  lcd.setCursor(0, 1);
+  lcd.print(line2);
 }
 
 void setup() {
-  pinMode(IR_SENSOR_PIN, INPUT);
   Serial.begin(115200);
-  WiFi.begin(ssid, password);
-  lcd.begin();
+  lcd.init();
   lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Menghubungkan...");
-  
+  lcdPrint("WiFi Connect", ssid);
+
+  WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    lcdPrint("Connecting...", ".");
   }
-  
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("WiFi Tersambung");
 
-  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  lcdPrint("Connected", WiFi.localIP().toString());
+  Serial.println();
+  Serial.println("IP address: " + WiFi.localIP().toString());
+
+  // Setup Firebase config
+  config.api_key = FIREBASE_API_KEY;
+  config.database_url = FIREBASE_HOST;
+
+  auth.user.email = FIREBASE_EMAIL;
+  auth.user.password = FIREBASE_PASSWORD;
+
+  Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  server.on("/", handleRoot);
+  // Update status and log
+  deviceStatus = "Online";
+  Firebase.setString(fbdo, "/device/status", deviceStatus);
+
+  String timeStr = String(millis());
+  String logPath = "/device/logs/" + timeStr;
+  Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
+
+  // Halaman /
+  server.on("/", []() {
+    String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><title>ESP8266 Status</title></head><body style='font-family:sans-serif;background:#111;color:#fff;padding:20px;'>";
+    html += "<h2>Status Perangkat</h2>";
+    html += "<p>Status: <strong>" + deviceStatus + "</strong></p>";
+    html += "<p>IP: " + WiFi.localIP().toString() + "</p>";
+    html += "<h2>Riwayat Log</h2><ul>";
+
+    if (Firebase.getJSON(fbdo, "/device/logs")) {
+      FirebaseJson& json = fbdo.jsonObject();
+      size_t count = json.iteratorBegin();
+      for (size_t i = 0; i < count; i++) {
+        String key, value;
+        int type;
+        json.iteratorGet(i, type, key, value);
+        html += "<li><b>" + key + ":</b> " + value + "</li>";
+      }
+      json.iteratorEnd();
+    } else {
+      html += "<li>Error ambil log: " + fbdo.errorReason() + "</li>";
+    }
+
+    html += "</ul>";
+    html += "<p><a href='/update' style='color:cyan'>Update Firmware</a></p>";
+    html += "</body></html>";
+
+    server.send(200, "text/html", html);
+    lcdPrint("Page: /", "View logs");
+  });
+
+  // OTA update
+  httpUpdater.setup(&server);
+
   server.begin();
+  Serial.println("HTTP server started");
+  lcdPrint("OTA Aktif", "/update");
 }
 
 void loop() {
   server.handleClient();
-
-  bool irDetected = digitalRead(IR_SENSOR_PIN) == LOW; // LOW jika terdeteksi
-  String newStatus = irDetected ? "Terdeteksi" : "Tidak Aktif";
-
-  if (newStatus != sensorStatus) {
-    sensorStatus = newStatus;
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("IR: " + sensorStatus);
-
-    if (Firebase.ready()) {
-      Firebase.setString(firebaseData, "/esp8266/sensorIR", sensorStatus);
-    }
-  }
-
-  delay(1000);
 }
