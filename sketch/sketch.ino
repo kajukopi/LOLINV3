@@ -28,32 +28,35 @@ String deviceStatus = "Unknown";
 
 // ---------- Functions ----------
 
+void lcdMessage(String line1, String line2 = "") {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1);
+  lcd.setCursor(0, 1);
+  lcd.print(line2);
+}
+
 void initLCD() {
   lcd.init();
   lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("WiFi Connect");
-  lcd.setCursor(0, 1);
-  lcd.print(ssid);
+  lcdMessage("WiFi Connect", ssid);
 }
 
 void connectWiFi() {
   WiFi.begin(ssid, password);
+  int dotCount = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    dotCount++;
+    lcdMessage("Connecting" + String(dotCount % 4 == 0 ? "..." : dotCount % 4 == 1 ? "." : dotCount % 4 == 2 ? ".." : "..."), ssid);
   }
-  Serial.println();
-  Serial.println("IP address: " + WiFi.localIP().toString());
 
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("IP Address:");
-  lcd.setCursor(0, 1);
-  lcd.print(WiFi.localIP());
+  lcdMessage("WiFi Connected", WiFi.localIP().toString());
+  delay(2000);
 }
 
 void initFirebase() {
+  lcdMessage("Init Firebase", "");
   config.api_key = FIREBASE_API_KEY;
   config.database_url = "https://" FIREBASE_HOST;
 
@@ -62,6 +65,9 @@ void initFirebase() {
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+
+  lcdMessage("Firebase OK");
+  delay(1000);
 }
 
 void logDeviceStatus() {
@@ -71,6 +77,9 @@ void logDeviceStatus() {
   String timeStr = String(millis());
   String logPath = "/device/logs/" + timeStr;
   Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
+
+  lcdMessage("Logged at", timeStr);
+  delay(1000);
 }
 
 void setupEndpoints() {
@@ -102,15 +111,14 @@ void setupEndpoints() {
 // ---------- Setup & Loop ----------
 
 void setup() {
-  Serial.begin(115200);
   initLCD();
   connectWiFi();
   initFirebase();
   logDeviceStatus();
   setupEndpoints();
-  server.begin();
 
-  Serial.println("HTTP server started");
+  server.begin();
+  lcdMessage("HTTP Server", "Started");
 }
 
 void loop() {
