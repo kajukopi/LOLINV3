@@ -23,25 +23,23 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-// State
 String deviceStatus = "Unknown";
 
-// ---------- Functions ----------
-
+// LCD helper
 void lcdMessage(String line1, String line2 = "") {
   lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(line1);
-  lcd.setCursor(0, 1);
-  lcd.print(line2);
+  lcd.setCursor(0, 0); lcd.print(line1);
+  lcd.setCursor(0, 1); lcd.print(line2);
 }
 
+// Initialize LCD
 void initLCD() {
   lcd.init();
   lcd.backlight();
   lcdMessage("WiFi Connect", ssid);
 }
 
+// Connect to WiFi
 void connectWiFi() {
   WiFi.begin(ssid, password);
   int dotCount = 0;
@@ -50,16 +48,15 @@ void connectWiFi() {
     dotCount++;
     lcdMessage("Connecting" + String(dotCount % 4 == 0 ? "..." : dotCount % 4 == 1 ? "." : dotCount % 4 == 2 ? ".." : "..."), ssid);
   }
-
-  lcdMessage("WiFi Connected", WiFi.localIP().toString());
-  delay(2000);
+  lcdMessage("WiFi OK", WiFi.localIP().toString());
+  delay(1500);
 }
 
+// Firebase setup
 void initFirebase() {
   lcdMessage("Init Firebase");
   config.api_key = FIREBASE_API_KEY;
   config.database_url = "https://" FIREBASE_HOST;
-
   auth.user.email = FIREBASE_EMAIL;
   auth.user.password = FIREBASE_PASSWORD;
 
@@ -70,10 +67,10 @@ void initFirebase() {
   delay(1000);
 }
 
+// Log device status to Firebase
 void logDeviceStatus() {
   deviceStatus = "Online";
   Firebase.setString(fbdo, "/device/status", deviceStatus);
-
   String timeStr = String(millis());
   String logPath = "/device/logs/" + timeStr;
   Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
@@ -82,6 +79,7 @@ void logDeviceStatus() {
   delay(1000);
 }
 
+// Web server endpoints
 void setupEndpoints() {
   server.on("/", []() {
     String logHtml = "";
@@ -93,36 +91,39 @@ void setupEndpoints() {
         String key, value;
         int type;
         logs.iteratorGet(i, type, key, value);
-        logHtml += "<li><strong>" + key + ":</strong> " + value + "</li>\n";
+        logHtml += "<li class='list-group-item'><strong>" + key + ":</strong> " + value + "</li>\n";
       }
       logs.iteratorEnd();
     } else {
-      logHtml += "<li>Error: " + fbdo.errorReason() + "</li>\n";
+      logHtml += "<li class='list-group-item text-danger'>Error: " + fbdo.errorReason() + "</li>\n";
     }
 
-    // Template HTML dengan token yang bisa diganti
     String html = R"rawliteral(
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
       <head>
-        <title>ESP8266 Status</title>
         <meta charset="UTF-8">
-        <style>
-          body { font-family: Arial; text-align: center; margin-top: 40px; }
-          h1 { color: #333; }
-          ul { text-align: left; max-width: 400px; margin: auto; }
-          li { margin: 4px 0; }
-        </style>
+        <title>ESP8266 Device</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.4.2/mdb.min.css" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
       </head>
-      <body>
-        <h1>ESP8266 Device</h1>
-        <p><strong>Status:</strong> {{status}}</p>
-        <p><strong>IP Address:</strong> {{ip}}</p>
-        <p><strong>Uptime:</strong> {{millis}} ms</p>
-        <h3>Log:</h3>
-        <ul>
-          {{logs}}
-        </ul>
+      <body class="bg-light">
+        <div class="container mt-5">
+          <div class="card shadow-3">
+            <div class="card-body text-center">
+              <h3 class="card-title"><i class="fas fa-microchip"></i> ESP8266 Status</h3>
+              <p class="card-text"><strong>Status:</strong> {{status}}</p>
+              <p class="card-text"><strong>IP Address:</strong> {{ip}}</p>
+              <p class="card-text"><strong>Uptime:</strong> {{millis}} ms</p>
+              <h5 class="mt-4"><i class="fas fa-clipboard-list"></i> Logs</h5>
+              <ul class="list-group text-start mt-3">
+                {{logs}}
+              </ul>
+            </div>
+          </div>
+        </div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.4.2/mdb.min.js"></script>
       </body>
       </html>
     )rawliteral";
@@ -138,15 +139,12 @@ void setupEndpoints() {
   httpUpdater.setup(&server);
 }
 
-// ---------- Setup & Loop ----------
-
 void setup() {
   initLCD();
   connectWiFi();
   initFirebase();
   logDeviceStatus();
   setupEndpoints();
-
   server.begin();
   lcdMessage("HTTP Server", "Started");
 }
