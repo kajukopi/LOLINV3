@@ -15,6 +15,7 @@ const char* password = "09871234";
 #define FIREBASE_PASSWORD "password123"
 #define FIREBASE_API_KEY "AIzaSyBczsujBWZbP2eq5C1YR1JF3xPixWVYnxY"
 
+// Objects
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -22,35 +23,37 @@ FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
+// State
 String deviceStatus = "Unknown";
 
-void setup() {
-  Serial.begin(115200);
+// ---------- Functions ----------
+
+void initLCD() {
   lcd.init();
   lcd.backlight();
-
   lcd.setCursor(0, 0);
   lcd.print("WiFi Connect");
   lcd.setCursor(0, 1);
   lcd.print(ssid);
+}
 
+void connectWiFi() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-
   Serial.println();
   Serial.println("IP address: " + WiFi.localIP().toString());
 
-  // Tampilkan IP address ke LCD
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("IP Address:");
   lcd.setCursor(0, 1);
   lcd.print(WiFi.localIP());
+}
 
-  // Firebase configuration
+void initFirebase() {
   config.api_key = FIREBASE_API_KEY;
   config.database_url = "https://" FIREBASE_HOST;
 
@@ -59,16 +62,18 @@ void setup() {
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+}
 
-  // Set device status dan log boot
+void logDeviceStatus() {
   deviceStatus = "Online";
   Firebase.setString(fbdo, "/device/status", deviceStatus);
 
   String timeStr = String(millis());
   String logPath = "/device/logs/" + timeStr;
   Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
+}
 
-  // Endpoint text response
+void setupEndpoints() {
   server.on("/", []() {
     String response = "Device Status: " + deviceStatus + "\n";
     response += "IP Address: " + WiFi.localIP().toString() + "\n";
@@ -91,10 +96,20 @@ void setup() {
     server.send(200, "text/plain", response);
   });
 
-  // OTA Firmware update via /update
   httpUpdater.setup(&server);
+}
 
+// ---------- Setup & Loop ----------
+
+void setup() {
+  Serial.begin(115200);
+  initLCD();
+  connectWiFi();
+  initFirebase();
+  logDeviceStatus();
+  setupEndpoints();
   server.begin();
+
   Serial.println("HTTP server started");
 }
 
