@@ -25,6 +25,9 @@ FirebaseConfig config;
 
 String deviceStatus = "Unknown";
 
+unsigned long lastDisplayMillis = 0;
+bool showIpNow = false;
+
 // LCD helper
 void lcdMessage(String line1, String line2 = "") {
   lcd.clear();
@@ -139,6 +142,24 @@ void setupEndpoints() {
   httpUpdater.setup(&server);
 }
 
+void handleTimedDisplay() {
+  unsigned long currentMillis = millis();
+
+  // Setiap 10 detik, aktifkan tampilan IP selama 3 detik
+  if (!showIpNow && currentMillis - lastDisplayMillis >= 10000) {
+    showIpNow = true;
+    lastDisplayMillis = currentMillis;
+    lcdMessage("IP Address:", WiFi.localIP().toString());
+  }
+
+  // Setelah 3 detik, kembalikan ke tampilan normal
+  if (showIpNow && currentMillis - lastDisplayMillis >= 3000) {
+    showIpNow = false;
+    lastDisplayMillis = currentMillis;
+    lcdMessage("Status:", deviceStatus);
+  }
+}
+
 void setup() {
   initLCD();
   connectWiFi();
@@ -151,4 +172,5 @@ void setup() {
 
 void loop() {
   server.handleClient();
+  handleTimedDisplay(); // Tambahkan ini
 }
