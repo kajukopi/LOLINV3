@@ -16,6 +16,10 @@ const char* password = "09871234";
 #define FIREBASE_EMAIL "esp8266@yourapp.com"
 #define FIREBASE_PASSWORD "password123"
 
+// Pin sensor IR Flying Fish
+#define IR_SENSOR_PIN D5  // Aktif LOW (LOW = terdeteksi)
+
+// LCD, Web Server, Updater, Firebase
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -25,6 +29,8 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 String deviceStatus = "Unknown";
+unsigned long lastTriggerTime = 0;
+bool lastIRState = false;
 
 void lcdPrint(const String& line1, const String& line2 = "") {
   lcd.clear();
@@ -34,11 +40,34 @@ void lcdPrint(const String& line1, const String& line2 = "") {
   lcd.print(line2);
 }
 
+void checkIRSensor() {
+  bool irState = digitalRead(IR_SENSOR_PIN) == LOW;  // LOW = terdeteksi objek
+
+  if (irState != lastIRState && millis() - lastTriggerTime > 500) {
+    lastTriggerTime = millis();
+    lastIRState = irState;
+
+    if (irState) {
+      deviceStatus = "TERDETEKSI";
+      lcdPrint("IR SENSOR:", "TERDETEKSI");
+      Firebase.setString(fbdo, "/device/status", deviceStatus);
+      String logPath = "/device/logs/" + String(millis());
+      Firebase.setString(fbdo, logPath, "IR Triggered at millis: " + String(millis()));
+    } else {
+      deviceStatus = "AMAN";
+      lcdPrint("IR SENSOR:", "AMAN");
+      Firebase.setString(fbdo, "/device/status", deviceStatus);
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   lcd.init();
   lcd.backlight();
   lcdPrint("WiFi Connect", ssid);
+
+  pinMode(IR_SENSOR_PIN, INPUT);
 
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -51,17 +80,15 @@ void setup() {
   Serial.println();
   Serial.println("IP address: " + WiFi.localIP().toString());
 
-  // Setup Firebase config
+  // Firebase config
   config.api_key = FIREBASE_API_KEY;
   config.database_url = FIREBASE_HOST;
-
   auth.user.email = FIREBASE_EMAIL;
   auth.user.password = FIREBASE_PASSWORD;
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  // Update status and log
   deviceStatus = "Online";
   Firebase.setString(fbdo, "/device/status", deviceStatus);
 
@@ -109,4 +136,5 @@ void setup() {
 
 void loop() {
   server.handleClient();
+  checkIRSensor(); // Cek sensor IR terus-menerus
 }
