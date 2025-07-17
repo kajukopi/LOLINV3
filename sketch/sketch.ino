@@ -43,7 +43,7 @@ void setup() {
   Serial.println();
   Serial.println("IP address: " + WiFi.localIP().toString());
 
-  // Tampilkan label dan IP address ke LCD
+  // Tampilkan IP address ke LCD
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("IP Address:");
@@ -68,13 +68,11 @@ void setup() {
   String logPath = "/device/logs/" + timeStr;
   Firebase.setString(fbdo, logPath, "Booted at millis: " + timeStr);
 
-  // Endpoint JSON API
+  // Endpoint text response
   server.on("/", []() {
-    FirebaseJson responseJson;
-    responseJson.add("status", deviceStatus);
-    responseJson.add("ip", WiFi.localIP().toString());
-
-    FirebaseJson logJson;
+    String response = "Device Status: " + deviceStatus + "\n";
+    response += "IP Address: " + WiFi.localIP().toString() + "\n";
+    response += "Logs:\n";
 
     if (Firebase.getJSON(fbdo, "/device/logs")) {
       FirebaseJson& logs = fbdo.jsonObject();
@@ -83,18 +81,14 @@ void setup() {
         String key, value;
         int type;
         logs.iteratorGet(i, type, key, value);
-        logJson.add(key, value);
+        response += " - " + key + ": " + value + "\n";
       }
       logs.iteratorEnd();
     } else {
-      logJson.add("error", fbdo.errorReason());
+      response += "Error: " + fbdo.errorReason() + "\n";
     }
 
-    responseJson.set("logs", logJson);
-
-    String jsonStr;
-    responseJson.toString(jsonStr, true); // Pretty print
-    server.send(200, "application/json", jsonStr);
+    server.send(200, "text/plain", response);
   });
 
   // OTA Firmware update via /update
