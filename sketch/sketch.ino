@@ -17,6 +17,7 @@ const char* password = "09871234";
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
+File fsUploadFile;
 
 String deviceStatus = "Online";
 unsigned long lastDisplayMillis = 0;
