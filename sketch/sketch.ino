@@ -3,17 +3,14 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
-#include <SPI.h>
-#include <SD.h>
+#include <SDFS.h>         // Ganti SD.h → SDFS.h
+#include <FS.h>           // Untuk File system interface
 
 // WiFi credentials
 const char* ssid = "karimroy";
 const char* password = "09871234";
 
-// SD card CS pin
-#define SD_CS_PIN D8
-
-// Objects
+// Global objects
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -52,38 +49,40 @@ void connectWiFi() {
 
 // Setup SD card
 void setupSD() {
-  if (!SD.begin(SD_CS_PIN)) {
+  if (!SDFS.begin()) {
+    Serial.println("SDFS init failed!");
     lcdMessage("SD Init Failed");
     deviceStatus = "SD Failed";
     return;
   }
+
+  Serial.println("SDFS initialized.");
   lcdMessage("SD Card", "Initialized");
 }
 
-// Web server endpoints
+// Setup web endpoints
 void setupEndpoints() {
-  // Status
+  // Status info
   server.on("/", []() {
-    String response = "Status: " + deviceStatus + "\n";
+    String response = "";
+    response += "Status: " + deviceStatus + "\n";
     response += "IP: " + WiFi.localIP().toString() + "\n";
-    response += "Uptime: " + String(millis()) + "\n";
+    response += "Uptime (ms): " + String(millis()) + "\n";
     server.send(200, "text/plain", response);
   });
 
-  // File uploader
+  // Upload handler
   server.on("/upload", HTTP_POST, []() {
-    server.send(200, "text/plain", "Upload Done");
+    server.send(200, "text/plain", "Upload OK");
   }, []() {
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
       String filename = "/" + upload.filename;
-      fsUploadFile = SD.open(filename, FILE_WRITE);
+      fsUploadFile = SDFS.open(filename, "w");
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-      if (fsUploadFile)
-        fsUploadFile.write(upload.buf, upload.currentSize);
+      if (fsUploadFile) fsUploadFile.write(upload.buf, upload.currentSize);
     } else if (upload.status == UPLOAD_FILE_END) {
-      if (fsUploadFile)
-        fsUploadFile.close();
+      if (fsUploadFile) fsUploadFile.close();
     }
   });
 
@@ -91,7 +90,7 @@ void setupEndpoints() {
   server.onNotFound([]() {
     String path = server.uri();
     if (path.endsWith("/")) path += "index.html";
-    File file = SD.open(path);
+    File file = SDFS.open(path, "r");
     if (!file) {
       server.send(404, "text/plain", "File Not Found");
       return;
@@ -109,6 +108,7 @@ void setupEndpoints() {
   httpUpdater.setup(&server);
 }
 
+// Tampilan LCD bergantian
 void handleTimedDisplay() {
   unsigned long currentMillis = millis();
 
@@ -126,6 +126,7 @@ void handleTimedDisplay() {
 }
 
 void setup() {
+  Serial.begin(115200);
   initLCD();
   connectWiFi();
   setupSD();
