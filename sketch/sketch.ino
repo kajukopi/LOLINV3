@@ -3,10 +3,15 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
 
 // WiFi credentials
 const char* ssid = "karimroy";
 const char* password = "09871234";
+
+// SD card CS pin
+#define SD_CS_PIN D8
 
 // Objects
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -44,14 +49,60 @@ void connectWiFi() {
   delay(1500);
 }
 
+// Setup SD card
+void setupSD() {
+  if (!SD.begin(SD_CS_PIN)) {
+    lcdMessage("SD Init Failed");
+    deviceStatus = "SD Failed";
+    return;
+  }
+  lcdMessage("SD Card", "Initialized");
+}
+
 // Web server endpoints
 void setupEndpoints() {
+  // Status
   server.on("/", []() {
-    String response = "";
-    response += "Status: " + deviceStatus + "\n";
+    String response = "Status: " + deviceStatus + "\n";
     response += "IP: " + WiFi.localIP().toString() + "\n";
-    response += "Uptime (ms): " + String(millis()) + "\n";
+    response += "Uptime: " + String(millis()) + "\n";
     server.send(200, "text/plain", response);
+  });
+
+  // File uploader
+  server.on("/upload", HTTP_POST, []() {
+    server.send(200, "text/plain", "Upload Done");
+  }, []() {
+    HTTPUpload& upload = server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+      String filename = "/" + upload.filename;
+      fsUploadFile = SD.open(filename, FILE_WRITE);
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+      if (fsUploadFile)
+        fsUploadFile.write(upload.buf, upload.currentSize);
+    } else if (upload.status == UPLOAD_FILE_END) {
+      if (fsUploadFile)
+        fsUploadFile.close();
+    }
+  });
+
+  // Serve SD files
+  server.onNotFound([]() {
+    String path = server.uri();
+    if (path.endsWith("/")) path += "index.html";
+    File file = SD.open(path);
+    if (!file) {
+      server.send(404, "text/plain", "File Not Found");
+      return;
+    }
+
+    String contentType = "text/plain";
+    if (path.endsWith(".html")) contentType = "text/html";
+    else if (path.endsWith(".css")) contentType = "text/css";
+    else if (path.endsWith(".js")) contentType = "application/javascript";
+
+    server.streamFile(file, contentType);
+    file.close();
   });
 
   httpUpdater.setup(&server);
@@ -60,14 +111,12 @@ void setupEndpoints() {
 void handleTimedDisplay() {
   unsigned long currentMillis = millis();
 
-  // Setiap 10 detik, tampilkan IP selama 3 detik
   if (!showIpNow && currentMillis - lastDisplayMillis >= 10000) {
     showIpNow = true;
     lastDisplayMillis = currentMillis;
     lcdMessage("IP Address:", WiFi.localIP().toString());
   }
 
-  // Setelah 3 detik, kembalikan ke tampilan status
   if (showIpNow && currentMillis - lastDisplayMillis >= 3000) {
     showIpNow = false;
     lastDisplayMillis = currentMillis;
@@ -78,6 +127,7 @@ void handleTimedDisplay() {
 void setup() {
   initLCD();
   connectWiFi();
+  setupSD();
   setupEndpoints();
   server.begin();
   lcdMessage("HTTP Server", "Started");
