@@ -3,8 +3,6 @@ name: 📦 Compile ESP8266 Sketch
 on:
   push:
     branches: [main]
-    paths:
-      - 'sketch/*.ino'
   workflow_dispatch:
 
 permissions:
@@ -16,94 +14,87 @@ jobs:
 
     strategy:
       matrix:
-        include:
-          - name: lolin
-            file: lolin.ino
-            fqbn: esp8266:esp8266:nodemcuv2
-          - name: wemos1
-            file: wemos1.ino
-            fqbn: esp8266:esp8266:d1_mini
-          - name: wemos2
-            file: wemos2.ino
-            fqbn: esp8266:esp8266:d1_mini
-
-    # Hanya jalankan job jika file .ino terkait diubah
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      contains(join(github.event.head_commit.modified, ','), matrix.file)
+        board:
+          - { name: Lolin, fqbn: esp8266:esp8266:d1_mini }
+          - { name: Wemos1, fqbn: esp8266:esp8266:nodemcuv2 }
+          - { name: Wemos2, fqbn: esp8266:esp8266:nodemcuv2 }
 
     steps:
-      - name: 🛒 Checkout source code
-        uses: actions/checkout@v4
+    - name: 🛒 Checkout source code
+      uses: actions/checkout@v4
 
-      - name: ⚙️ Set up Arduino CLI
-        uses: arduino/setup-arduino-cli@v1
+    - name: ⚙️ Set up Arduino CLI
+      uses: arduino/setup-arduino-cli@v1
 
-      - name: 🧱 Initialize Arduino CLI config
-        run: arduino-cli config init
+    - name: 🧱 Initialize Arduino CLI config
+      run: arduino-cli config init
 
-      - name: ➕ Add ESP8266 Board Manager URL
-        run: |
-          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+    - name: ➕ Add ESP8266 Board Manager URL
+      run: |
+        arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
 
-      - name: 📥 Install ESP8266 core
-        run: |
-          arduino-cli core update-index
-          arduino-cli core install esp8266:esp8266
+    - name: 📥 Install ESP8266 core
+      run: |
+        arduino-cli core update-index
+        arduino-cli core install esp8266:esp8266
 
-      - name: 📁 Configure Arduino library path
-        run: |
-          echo "directories:\n  user: $HOME/Arduino" > ~/.arduino15/arduino-cli.yaml
+    - name: 📁 Configure Arduino library path
+      run: |
+        echo "directories:\n  user: $HOME/Arduino" > ~/.arduino15/arduino-cli.yaml
 
-      - name: 📚 Install required libraries
-        run: |
-          mkdir -p ~/Arduino/libraries
-          cd ~/Arduino/libraries
-          curl -L https://github.com/johnrickman/LiquidCrystal_I2C/archive/refs/heads/master.zip -o LiquidCrystal_I2C.zip
-          unzip LiquidCrystal_I2C.zip
-          mv LiquidCrystal_I2C-master LiquidCrystal_I2C
+    - name: 📚 Install required libraries
+      run: |
+        mkdir -p ~/Arduino/libraries
+        cd ~/Arduino/libraries
+        curl -L https://github.com/johnrickman/LiquidCrystal_I2C/archive/refs/heads/master.zip -o LiquidCrystal_I2C.zip
+        unzip LiquidCrystal_I2C.zip
+        mv LiquidCrystal_I2C-master LiquidCrystal_I2C
 
-      - name: 🛠️ Compile ${{ matrix.file }}
-        run: |
-          mkdir -p build
-          arduino-cli compile \
-            --fqbn ${{ matrix.fqbn }} \
-            ${{ matrix.file }} \
-            --output-dir build \
-            --verbose
+    - name: 🛠️ Compile sketch for ${{ matrix.board.name }}
+      run: |
+        arduino-cli compile \
+          --fqbn ${{ matrix.board.fqbn }} \
+          sketch \
+          --output-dir build \
+          --verbose
 
-      - name: 📅 Get date in Asia/Jakarta
-        id: date
-        run: |
-          export TZ=Asia/Jakarta
-          today=$(date +%F-%H%M)
-          detail=$(date "+📅 %A, %d %B %Y 🕒 %H:%M %Z")
-          echo "today=$today" >> "$GITHUB_OUTPUT"
-          echo "detail=$detail" >> "$GITHUB_OUTPUT"
+    - name: 📅 Get date in Asia/Jakarta
+      id: date
+      run: |
+        export TZ=Asia/Jakarta
+        today=$(date +%F-%H%M)
+        detail=$(date "+📅 %A, %d %B %Y 🕒 %H:%M %Z")
+        echo "today=$today" >> "$GITHUB_OUTPUT"
+        echo "detail=$detail" >> "$GITHUB_OUTPUT"
 
-      - name: 🗃️ Rename firmware with sketch name and date
-        run: |
-          for f in build/*.bin; do
-            mv "$f" "build/${{ matrix.name }}-${{ steps.date.outputs.today }}.bin"
-          done
+    - name: 🗃️ Rename firmware with board name + date
+      run: |
+        for f in build/*.bin; do
+          mv "$f" "build/${{ matrix.board.name }}-${{ steps.date.outputs.today }}.bin"
+        done
 
-      - name: 📤 Upload firmware artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.name }}-${{ steps.date.outputs.today }}
-          path: build/${{ matrix.name }}-*.bin
+    - name: 📤 Upload firmware artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.board.name }}-${{ steps.date.outputs.today }}
+        path: build/${{ matrix.board.name }}-*.bin
 
-      - name: 🚀 Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ matrix.name }}-${{ steps.date.outputs.today }}
-          files: build/${{ matrix.name }}-*.bin
-          body: |
-            🔖 **Informasi Build Firmware**
-            ----------------------------------------
-            🛠️ Sketch: `${{ matrix.file }}`  
-            📄 Nama File: `${{ matrix.name }}-${{ steps.date.outputs.today }}.bin`  
-            📅 Tanggal Build: ${{ steps.date.outputs.detail }}
-            📂 Direktori Output: `/build`
+    - name: 🚀 Create GitHub Release (only once)
+      if: matrix.board.name == 'Lolin' # hanya buat sekali
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ESP8266-${{ steps.date.outputs.today }}
+        files: |
+          build/Lolin-${{ steps.date.outputs.today }}.bin
+          build/Wemos1-${{ steps.date.outputs.today }}.bin
+          build/Wemos2-${{ steps.date.outputs.today }}.bin
+        body: |
+          🔖 **Informasi Build Firmware**
+          ----------------------------------------
+          🛠️ Lolin: `Lolin-${{ steps.date.outputs.today }}.bin`  
+          🛠️ Wemos 1: `Wemos1-${{ steps.date.outputs.today }}.bin`  
+          🛠️ Wemos 2: `Wemos2-${{ steps.date.outputs.today }}.bin`  
+          📅 Tanggal Build: ${{ steps.date.outputs.detail }}
+          📂 Direktori Output: `/build`
 
-            ✅ dibuat oleh karimroy.digital
+          ✅ dibuat oleh karimroy.digital
