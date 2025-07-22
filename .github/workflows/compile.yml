@@ -3,6 +3,10 @@ name: 📦 Compile LOLINV3 Sketch
 on:
   push:
     branches: [main]
+    paths:
+      - 'sketch/lolin.ino'
+      - 'sketch/wemos1.ino'
+      - 'sketch/wemos2.ino'
   workflow_dispatch:
 
 permissions:
@@ -11,6 +15,22 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sketch: [lolin, wemos1, wemos2]
+
+    # Hanya jalan jika sketch terkait diubah atau workflow manual
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, matrix.sketch) ||
+      (
+        github.event_name == 'push' &&
+        (
+          (matrix.sketch == 'lolin' && contains(join(github.event.commits.*.modified), 'sketch/lolin.ino')) ||
+          (matrix.sketch == 'wemos1' && contains(join(github.event.commits.*.modified), 'sketch/wemos1.ino')) ||
+          (matrix.sketch == 'wemos2' && contains(join(github.event.commits.*.modified), 'sketch/wemos2.ino'))
+        )
+      )
 
     steps:
     - name: 🛒 Checkout source code
@@ -22,11 +42,11 @@ jobs:
     - name: 🧱 Initialize Arduino CLI config
       run: arduino-cli config init
 
-    - name: ➕ Add LOLINV3 Board Manager URL
+    - name: ➕ Add Board Manager URL
       run: |
         arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
 
-    - name: 📥 Install LOLINV3 core
+    - name: 📥 Install ESP8266 core
       run: |
         arduino-cli core update-index
         arduino-cli core install esp8266:esp8266
@@ -46,11 +66,19 @@ jobs:
         unzip FirebaseESP8266.zip
         mv Firebase-ESP8266-master FirebaseESP8266
 
-    - name: 🛠️ Compile sketch
+    - name: 🛠️ Compile sketch: ${{ matrix.sketch }}
       run: |
+        # Tentukan board berdasarkan sketch
+        if [[ "${{ matrix.sketch }}" == "lolin" ]]; then
+          board="esp8266:esp8266:nodemcuv2"
+        else
+          board="esp8266:esp8266:d1_mini"
+        fi
+
+        mkdir -p build
         arduino-cli compile \
-          --fqbn esp8266:esp8266:nodemcuv2 \
-          sketch \
+          --fqbn $board \
+          sketch/${{ matrix.sketch }}.ino \
           --output-dir build \
           --verbose
 
@@ -63,28 +91,28 @@ jobs:
         echo "today=$today" >> "$GITHUB_OUTPUT"
         echo "detail=$detail" >> "$GITHUB_OUTPUT"
 
-    - name: 🗃️ Rename firmware with date
+    - name: 🗃️ Rename firmware with sketch name and date
       run: |
-        ls build
         for f in build/*.bin; do
-          mv "$f" "build/LOLINV3-${{ steps.date.outputs.today }}.bin"
+          mv "$f" "build/LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}.bin"
         done
 
     - name: 📤 Upload firmware artifact
       uses: actions/upload-artifact@v4
       with:
-        name: LOLINV3-${{ steps.date.outputs.today }}
+        name: LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}
         path: build/LOLINV3-*.bin
 
     - name: 🚀 Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: LOLINV3-${{ steps.date.outputs.today }}
+        tag_name: LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}
         files: build/LOLINV3-*.bin
         body: |
           🔖 **Informasi Build Firmware**
           ----------------------------------------
-          🛠️ Nama File: `LOLINV3-${{ steps.date.outputs.today }}.bin`  
+          🛠️ Sketch: `${{ matrix.sketch }}.ino`  
+          📄 Nama File: `LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}.bin`  
           📅 Tanggal Build: ${{ steps.date.outputs.detail }}
           📂 Direktori Output: `/build`
 
