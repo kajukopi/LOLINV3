@@ -1,12 +1,10 @@
-name: 📦 Compile LOLINV3 Sketch
+name: 📦 Compile ESP8266 Sketch
 
 on:
   push:
     branches: [main]
     paths:
-      - 'sketch/lolin.ino'
-      - 'sketch/wemos1.ino'
-      - 'sketch/wemos2.ino'
+      - '*.ino'
   workflow_dispatch:
 
 permissions:
@@ -15,105 +13,97 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        sketch: [lolin, wemos1, wemos2]
+        include:
+          - name: lolin
+            file: lolin.ino
+            fqbn: esp8266:esp8266:nodemcuv2
+          - name: wemos1
+            file: wemos1.ino
+            fqbn: esp8266:esp8266:d1_mini
+          - name: wemos2
+            file: wemos2.ino
+            fqbn: esp8266:esp8266:d1_mini
 
-    # Hanya jalan jika sketch terkait diubah atau workflow manual
+    # Hanya jalankan job jika file .ino terkait diubah
     if: |
       github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.message, matrix.sketch) ||
-      (
-        github.event_name == 'push' &&
-        (
-          (matrix.sketch == 'lolin' && contains(join(github.event.commits.*.modified), 'sketch/lolin.ino')) ||
-          (matrix.sketch == 'wemos1' && contains(join(github.event.commits.*.modified), 'sketch/wemos1.ino')) ||
-          (matrix.sketch == 'wemos2' && contains(join(github.event.commits.*.modified), 'sketch/wemos2.ino'))
-        )
-      )
+      contains(join(github.event.head_commit.modified, ','), matrix.file)
 
     steps:
-    - name: 🛒 Checkout source code
-      uses: actions/checkout@v4
+      - name: 🛒 Checkout source code
+        uses: actions/checkout@v4
 
-    - name: ⚙️ Set up Arduino CLI
-      uses: arduino/setup-arduino-cli@v1
+      - name: ⚙️ Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v1
 
-    - name: 🧱 Initialize Arduino CLI config
-      run: arduino-cli config init
+      - name: 🧱 Initialize Arduino CLI config
+        run: arduino-cli config init
 
-    - name: ➕ Add Board Manager URL
-      run: |
-        arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+      - name: ➕ Add ESP8266 Board Manager URL
+        run: |
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
 
-    - name: 📥 Install ESP8266 core
-      run: |
-        arduino-cli core update-index
-        arduino-cli core install esp8266:esp8266
+      - name: 📥 Install ESP8266 core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266
 
-    - name: 📁 Configure Arduino library path
-      run: |
-        echo "directories:\n  user: $HOME/Arduino" > ~/.arduino15/arduino-cli.yaml
+      - name: 📁 Configure Arduino library path
+        run: |
+          echo "directories:\n  user: $HOME/Arduino" > ~/.arduino15/arduino-cli.yaml
 
-    - name: 📚 Install required libraries
-      run: |
-        mkdir -p ~/Arduino/libraries
-        cd ~/Arduino/libraries
-        curl -L https://github.com/johnrickman/LiquidCrystal_I2C/archive/refs/heads/master.zip -o LiquidCrystal_I2C.zip
-        unzip LiquidCrystal_I2C.zip
-        mv LiquidCrystal_I2C-master LiquidCrystal_I2C
-        curl -L https://github.com/mobizt/Firebase-ESP8266/archive/refs/heads/master.zip -o FirebaseESP8266.zip
-        unzip FirebaseESP8266.zip
-        mv Firebase-ESP8266-master FirebaseESP8266
+      - name: 📚 Install required libraries
+        run: |
+          mkdir -p ~/Arduino/libraries
+          cd ~/Arduino/libraries
+          curl -L https://github.com/johnrickman/LiquidCrystal_I2C/archive/refs/heads/master.zip -o LiquidCrystal_I2C.zip
+          unzip LiquidCrystal_I2C.zip
+          mv LiquidCrystal_I2C-master LiquidCrystal_I2C
 
-    - name: 🛠️ Compile sketch: ${{ matrix.sketch }}
-      run: |
-        # Tentukan board berdasarkan sketch
-        if [[ "${{ matrix.sketch }}" == "lolin" ]]; then
-          board="esp8266:esp8266:nodemcuv2"
-        else
-          board="esp8266:esp8266:d1_mini"
-        fi
+      - name: 🛠️ Compile ${{ matrix.file }}
+        run: |
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn ${{ matrix.fqbn }} \
+            ${{ matrix.file }} \
+            --output-dir build \
+            --verbose
 
-        mkdir -p build
-        arduino-cli compile \
-          --fqbn $board \
-          sketch/${{ matrix.sketch }}.ino \
-          --output-dir build \
-          --verbose
+      - name: 📅 Get date in Asia/Jakarta
+        id: date
+        run: |
+          export TZ=Asia/Jakarta
+          today=$(date +%F-%H%M)
+          detail=$(date "+📅 %A, %d %B %Y 🕒 %H:%M %Z")
+          echo "today=$today" >> "$GITHUB_OUTPUT"
+          echo "detail=$detail" >> "$GITHUB_OUTPUT"
 
-    - name: 📅 Get date in Asia/Jakarta
-      id: date
-      run: |
-        export TZ=Asia/Jakarta
-        today=$(date +%F-%H%M)
-        detail=$(date "+📅 %A, %d %B %Y 🕒 %H:%M %Z")
-        echo "today=$today" >> "$GITHUB_OUTPUT"
-        echo "detail=$detail" >> "$GITHUB_OUTPUT"
+      - name: 🗃️ Rename firmware with sketch name and date
+        run: |
+          for f in build/*.bin; do
+            mv "$f" "build/${{ matrix.name }}-${{ steps.date.outputs.today }}.bin"
+          done
 
-    - name: 🗃️ Rename firmware with sketch name and date
-      run: |
-        for f in build/*.bin; do
-          mv "$f" "build/LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}.bin"
-        done
+      - name: 📤 Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-${{ steps.date.outputs.today }}
+          path: build/${{ matrix.name }}-*.bin
 
-    - name: 📤 Upload firmware artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}
-        path: build/LOLINV3-*.bin
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ matrix.name }}-${{ steps.date.outputs.today }}
+          files: build/${{ matrix.name }}-*.bin
+          body: |
+            🔖 **Informasi Build Firmware**
+            ----------------------------------------
+            🛠️ Sketch: `${{ matrix.file }}`  
+            📄 Nama File: `${{ matrix.name }}-${{ steps.date.outputs.today }}.bin`  
+            📅 Tanggal Build: ${{ steps.date.outputs.detail }}
+            📂 Direktori Output: `/build`
 
-    - name: 🚀 Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}
-        files: build/LOLINV3-*.bin
-        body: |
-          🔖 **Informasi Build Firmware**
-          ----------------------------------------
-          🛠️ Sketch: `${{ matrix.sketch }}.ino`  
-          📄 Nama File: `LOLINV3-${{ matrix.sketch }}-${{ steps.date.outputs.today }}.bin`  
-          📅 Tanggal Build: ${{ steps.date.outputs.detail }}
-          📂 Direktori Output: `/build`
-
-          ✅ dibuat oleh karimroy.digital
+            ✅ dibuat oleh karimroy.digital
