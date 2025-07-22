@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '*.ino'
+      - 'sketch/*.ino'
   workflow_dispatch:
 
 permissions:
